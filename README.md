@@ -121,6 +121,22 @@ python3 batch_convert.py ~/Games/Roms/INTV ~/Games/Roms/intv2
 
 ---
 
+## First-run on macOS
+
+The pre-built binary is not code-signed. macOS Gatekeeper will block it on first launch with a message like _"intv2convert cannot be opened because it is from an unidentified developer."_
+
+To clear the quarantine flag after downloading and extracting:
+
+```
+xattr -dr com.apple.quarantine intv2convert
+```
+
+Then run it normally. You only need to do this once.
+
+Alternatively: right-click the binary in Finder → **Open** → **Open** in the dialog that appears.
+
+---
+
 ## Building from source (C++)
 
 A single native binary — `intv2convert` / `intv2convert.exe` — provides all four
