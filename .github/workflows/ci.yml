@@ -32,10 +32,6 @@ jobs:
 
       - name: Smoke test (Windows)
         if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          # Disable PowerShell 7.3+ behaviour that turns non-zero native exit
-          # codes into terminating errors — our binary exits 1 for "no args".
-          $PSNativeCommandUseErrorActionPreference = $false
-          $out = & build\Release\intv2convert.exe 2>&1
-          if (-not ($out -match "intv2convert")) { exit 1 }
+        shell: cmd
+        # cmd pipe exit code = last command (findstr), not the binary's exit 1.
+        run: build\Release\intv2convert.exe 2>&1 | findstr "intv2convert"
