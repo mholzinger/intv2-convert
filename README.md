@@ -1,8 +1,12 @@
 # intv2-convert
 
-Python tools for converting Intellivision ROM files to **INTV2** format, the chunked
+Tools for converting Intellivision ROM files to **INTV2** format, the chunked
 ROM loading format used by the Intellivision FPGA cores on the
 **Analogue Nt Mini Noir** and **Analogue Pocket**.
+
+A native C++ binary (`intv2convert`) is available for all platforms with optional
+GUI support.  Python scripts are also included for environments where Python 3 is
+already present — they produce byte-identical output.
 
 ## Requirements
 
@@ -164,33 +168,54 @@ it automatically attaches to the parent console so output appears normally.
 
 ### macOS / Linux
 
+CLI only:
 ```
 mkdir build && cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release              # CLI only
-cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_GUI=ON  # + GUI
+cmake .. -DCMAKE_BUILD_TYPE=Release
+cmake --build .
+```
+
+With GUI:
+```
+mkdir build && cd build
+cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_GUI=ON
 cmake --build .
 ```
 
 ### Windows — MSVC
 
+CLI only:
 ```
 mkdir build && cd build
-cmake ..                   # CLI only
-cmake .. -DBUILD_GUI=ON    # + GUI
+cmake ..
+cmake --build . --config Release
+```
+
+With GUI:
+```
+mkdir build && cd build
+cmake .. -DBUILD_GUI=ON
 cmake --build . --config Release
 ```
 
 ### Windows — MinGW / MSYS2
 
+CLI only:
 ```
 mkdir build && cd build
 cmake .. -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release
 cmake --build .
 ```
 
+With GUI:
+```
+mkdir build && cd build
+cmake .. -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release -DBUILD_GUI=ON
+cmake --build .
+```
+
 The C++ binary and the Python scripts produce identical output and can be used
-interchangeably.  The Python scripts require no build step and remain the
-quickest option on systems where Python 3 is already present.
+interchangeably.
 
 ---
 

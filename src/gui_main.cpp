@@ -278,10 +278,10 @@ static int run_cli(int argc, char* argv[]) {
         fprintf(stderr,
             "intv2convert -- Convert Intellivision ROMs to INTV2 format\n\n"
             "Usage:\n"
-            "  intv2convert-gui rom   <input.rom> <output_stem>\n"
-            "  intv2convert-gui cfg   <input.bin> <input.cfg> <output_stem>\n"
-            "  intv2convert-gui lst   <input.lst> <output.intv> [--pocket]\n"
-            "  intv2convert-gui batch <source_dir> <output_dir> [--dry-run] [--force]\n\n"
+            "  intv2convert rom   <input.rom> <output_stem>\n"
+            "  intv2convert cfg   <input.bin> <input.cfg> <output_stem>\n"
+            "  intv2convert lst   <input.lst> <output.intv> [--pocket]\n"
+            "  intv2convert batch <source_dir> <output_dir> [--dry-run] [--force]\n\n"
             "Run without arguments to open the GUI.\n");
         return 1;
     }
