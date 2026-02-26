@@ -90,6 +90,37 @@ Writes:
 
 ---
 
+### `batch_convert.py` — Batch converter
+
+Walks a source directory recursively and converts all supported ROM files,
+mirroring the directory structure under the output directory.  Already-converted
+games (both output files present) are skipped automatically.
+
+```
+python3 batch_convert.py <source> <output> [--dry-run] [--force]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `<source>` | Directory to walk for Intellivision ROM files |
+| `<output>` | Directory to write converted `.intv` files into (created if needed) |
+| `--dry-run` | Show what would be converted without writing any files |
+| `--force` | Re-convert games that already have both output files |
+
+**Source format priority** (first match wins for each game stem):
+
+1. `.rom` → `make_intv2_from_rom.py`
+2. `.bin` + `.cfg` → `make_intv2_from_cfg.py`
+3. `.int` + `.cfg` → `make_intv2_from_cfg.py` (`.int` is identical to `.bin`)
+
+**Example:**
+
+```
+python3 batch_convert.py ~/Games/Roms/INTV ~/Games/Roms/intv2
+```
+
+---
+
 ## Hardware variants
 
 | Year | Hardware | Notes |
