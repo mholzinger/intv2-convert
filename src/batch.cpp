@@ -1,3 +1,4 @@
+#include "batch.hpp"
 #include "writer.hpp"
 #include <algorithm>
 #include <cctype>
@@ -98,6 +99,117 @@ static std::vector<GameRecord> collect_games(const fs::path& source,
     return games;
 }
 
+BatchResult run_batch(const std::string& source_str, const std::string& output_str,
+                      bool dry_run, bool force,
+                      const std::function<void(const std::string&)>& log_fn) {
+    BatchResult result{0, 0, 0};
+
+    std::error_code ec;
+    fs::path source = fs::canonical(fs::path(source_str), ec);
+    if (ec || !fs::is_directory(source)) {
+        log_fn("Error: source directory not found: " + source_str);
+        result.failed = 1;
+        return result;
+    }
+    fs::path output = fs::weakly_canonical(fs::path(output_str));
+
+    auto games = collect_games(source, output, force);
+
+    int total   = (int)games.size();
+    int skipped = 0;
+    for (const auto& g : games) if (g.already_done) ++skipped;
+    int pending = total - skipped;
+
+    result.skipped = skipped;
+
+    log_fn("Source: " + fwd(source.string()));
+    log_fn("Output: " + fwd(output.string()));
+    log_fn(std::string(dry_run ? "DRY RUN -- " : "") +
+           "Found " + std::to_string(total) + " convertible games");
+    log_fn("  " + std::to_string(skipped) + " already done, " +
+           std::to_string(pending) + " to convert");
+    log_fn("");
+
+    if (pending == 0) {
+        log_fn("Nothing to do.");
+        return result;
+    }
+
+    if (dry_run) {
+        log_fn("Would convert:");
+        for (const auto& g : games) {
+            if (g.already_done) continue;
+            std::string label = (g.rel == ".") ? g.stem : fwd(g.rel) + "/" + g.stem;
+            // Left-justify source format in a 9-char field: "  [.rom     ]  Soccer"
+            std::string src_field = fmt_source(g.src);
+            while (src_field.size() < 9) src_field += ' ';
+            log_fn("  [" + src_field + "]  " + label);
+        }
+        log_fn("");
+        log_fn("Re-run without --dry-run to write files.");
+        return result;
+    }
+
+    std::vector<std::pair<std::string, std::string>> failed;
+
+    for (const auto& g : games) {
+        if (g.already_done) continue;
+
+        std::string label = (g.rel == ".") ? g.stem : fwd(g.rel) + "/" + g.stem;
+
+        std::error_code dir_ec;
+        fs::create_directories(g.target_dir, dir_ec);
+        if (dir_ec) {
+            log_fn("  FAIL " + label + "  (" + fmt_source(g.src) + ")");
+            log_fn("       cannot create output directory: " + dir_ec.message());
+            failed.push_back({ label, dir_ec.message() });
+            continue;
+        }
+
+        std::string output_stem = (g.target_dir / g.stem).string();
+        std::string err;
+
+        if (g.src.type == SrcType::ROM)
+            err = convert_rom(g.src.data.string(), output_stem, true);
+        else
+            err = convert_cfg(g.src.data.string(), g.src.cfg.string(), output_stem, true);
+
+        if (err.empty()) {
+            log_fn("  OK   " + label + "  (" + fmt_source(g.src) + ")");
+            ++result.converted;
+        } else {
+            log_fn("  FAIL " + label + "  (" + fmt_source(g.src) + ")");
+            size_t nl = err.find('\n');
+            log_fn("       " + (nl == std::string::npos ? err : err.substr(0, nl)));
+            failed.push_back({ label, err });
+        }
+    }
+
+    result.failed = (int)failed.size();
+    log_fn("");
+    log_fn("Done: " + std::to_string(result.converted) + " converted, " +
+           std::to_string(result.failed) + " failed, " +
+           std::to_string(result.skipped) + " skipped.");
+
+    if (!failed.empty()) {
+        log_fn("");
+        log_fn("Failed games:");
+        for (const auto& [label, err] : failed) {
+            log_fn("  " + label);
+            if (!err.empty()) {
+                std::string line;
+                for (char c : err) {
+                    if (c == '\n') { log_fn("    " + line); line.clear(); }
+                    else           { line += c; }
+                }
+                if (!line.empty()) log_fn("    " + line);
+            }
+        }
+    }
+
+    return result;
+}
+
 int cmd_batch(int argc, char* argv[]) {
     bool dry_run = false;
     bool force   = false;
@@ -120,99 +232,7 @@ int cmd_batch(int argc, char* argv[]) {
         return 1;
     }
 
-    fs::path source = fs::canonical(fs::path(pos[0]));
-    // weakly_canonical resolves the path but doesn't require it to exist yet
-    fs::path output = fs::weakly_canonical(fs::path(pos[1]));
-
-    if (!fs::is_directory(source)) {
-        fprintf(stderr, "Error: source directory not found: %s\n",
-                source.string().c_str());
-        return 1;
-    }
-
-    auto games = collect_games(source, output, force);
-
-    int total   = (int)games.size();
-    int skipped = 0;
-    for (const auto& g : games) if (g.already_done) ++skipped;
-    int pending = total - skipped;
-
-    printf("Source: %s\n", fwd(source.string()).c_str());
-    printf("Output: %s\n", fwd(output.string()).c_str());
-    printf("%sFound %d convertible games\n", dry_run ? "DRY RUN -- " : "", total);
-    printf("  %d already done, %d to convert\n\n", skipped, pending);
-
-    if (pending == 0) {
-        printf("Nothing to do.\n");
-        return 0;
-    }
-
-    if (dry_run) {
-        printf("Would convert:\n");
-        for (const auto& g : games) {
-            if (g.already_done) continue;
-            std::string label = (g.rel == ".") ? g.stem : fwd(g.rel) + "/" + g.stem;
-            printf("  [%-9s]  %s\n", fmt_source(g.src).c_str(), label.c_str());
-        }
-        printf("\nRe-run without --dry-run to write files.\n");
-        return 0;
-    }
-
-    int converted = 0;
-    std::vector<std::pair<std::string, std::string>> failed;
-
-    for (const auto& g : games) {
-        if (g.already_done) continue;
-
-        std::string label = (g.rel == ".") ? g.stem : fwd(g.rel) + "/" + g.stem;
-
-        std::error_code ec;
-        fs::create_directories(g.target_dir, ec);
-        if (ec) {
-            printf("  FAIL %s  (%s)\n", label.c_str(), fmt_source(g.src).c_str());
-            printf("       cannot create output directory: %s\n", ec.message().c_str());
-            failed.push_back({ label, ec.message() });
-            continue;
-        }
-
-        std::string output_stem = (g.target_dir / g.stem).string();
-        std::string err;
-
-        if (g.src.type == SrcType::ROM)
-            err = convert_rom(g.src.data.string(), output_stem, true);
-        else
-            err = convert_cfg(g.src.data.string(), g.src.cfg.string(), output_stem, true);
-
-        if (err.empty()) {
-            printf("  OK   %s  (%s)\n", label.c_str(), fmt_source(g.src).c_str());
-            ++converted;
-        } else {
-            printf("  FAIL %s  (%s)\n", label.c_str(), fmt_source(g.src).c_str());
-            // Print only the first line of multi-line errors inline
-            size_t nl = err.find('\n');
-            printf("       %s\n", (nl == std::string::npos ? err : err.substr(0, nl)).c_str());
-            failed.push_back({ label, err });
-        }
-    }
-
-    printf("\nDone: %d converted, %d failed, %d skipped.\n",
-           converted, (int)failed.size(), skipped);
-
-    if (!failed.empty()) {
-        printf("\nFailed games:\n");
-        for (const auto& [label, err] : failed) {
-            printf("  %s\n", label.c_str());
-            // Print full error (may be multi-line for bank-switching detail)
-            if (!err.empty()) {
-                std::string line;
-                for (char c : err) {
-                    if (c == '\n') { printf("    %s\n", line.c_str()); line.clear(); }
-                    else           { line += c; }
-                }
-                if (!line.empty()) printf("    %s\n", line.c_str());
-            }
-        }
-    }
-
-    return failed.empty() ? 0 : 1;
+    BatchResult r = run_batch(pos[0], pos[1], dry_run, force,
+                              [](const std::string& s){ printf("%s\n", s.c_str()); });
+    return r.failed > 0 ? 1 : 0;
 }

@@ -43,7 +43,7 @@ jobs:
         # cmake_extra for macOS contains a semicolon (arm64;x86_64). Passing it
         # via an env var and quoting it prevents bash from treating ; as a
         # command separator (which caused exit code 127 on macos runners).
-        run: cmake -B build -DCMAKE_BUILD_TYPE=Release ${CMAKE_EXTRA:+"$CMAKE_EXTRA"}
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_GUI=ON ${CMAKE_EXTRA:+"$CMAKE_EXTRA"}
 
       - name: Build
         run: cmake --build build --config Release

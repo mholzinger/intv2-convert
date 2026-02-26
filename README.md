@@ -139,8 +139,9 @@ Alternatively: right-click the binary in Finder → **Open** → **Open** in the
 
 ## Building from source (C++)
 
-A single native binary — `intv2convert` / `intv2convert.exe` — provides all four
-tools as subcommands.  Requires a C++17 compiler and CMake 3.16+.
+Requires a C++17 compiler and CMake 3.16+.
+
+### CLI usage
 
 ```
 intv2convert rom   <input.rom>  <output_stem>
@@ -149,11 +150,24 @@ intv2convert lst   <input.lst>  <output.intv>  [--pocket]
 intv2convert batch <source_dir> <output_dir>  [--dry-run] [--force]
 ```
 
+### GUI build
+
+Add `-DBUILD_GUI=ON` to enable the native graphical interface (two tabs: Batch
+and Single File).  With no arguments `intv2convert` opens its GUI; with arguments
+it behaves identically to the CLI-only build.
+
+The first configure downloads GLFW, Dear ImGui, and nativefiledialog-extended
+via FetchContent (~20 MB).
+
+On Windows the GUI binary has no console window, but when invoked from a terminal
+it automatically attaches to the parent console so output appears normally.
+
 ### macOS / Linux
 
 ```
 mkdir build && cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release
+cmake .. -DCMAKE_BUILD_TYPE=Release              # CLI only
+cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_GUI=ON  # + GUI
 cmake --build .
 ```
 
@@ -161,7 +175,8 @@ cmake --build .
 
 ```
 mkdir build && cd build
-cmake ..
+cmake ..                   # CLI only
+cmake .. -DBUILD_GUI=ON    # + GUI
 cmake --build . --config Release
 ```
 
