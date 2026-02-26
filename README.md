@@ -121,6 +121,48 @@ python3 batch_convert.py ~/Games/Roms/INTV ~/Games/Roms/intv2
 
 ---
 
+## Building from source (C++)
+
+A single native binary — `intv2convert` / `intv2convert.exe` — provides all four
+tools as subcommands.  Requires a C++17 compiler and CMake 3.16+.
+
+```
+intv2convert rom   <input.rom>  <output_stem>
+intv2convert cfg   <input.bin>  <input.cfg>  <output_stem>
+intv2convert lst   <input.lst>  <output.intv>  [--pocket]
+intv2convert batch <source_dir> <output_dir>  [--dry-run] [--force]
+```
+
+### macOS / Linux
+
+```
+mkdir build && cd build
+cmake .. -DCMAKE_BUILD_TYPE=Release
+cmake --build .
+```
+
+### Windows — MSVC
+
+```
+mkdir build && cd build
+cmake ..
+cmake --build . --config Release
+```
+
+### Windows — MinGW / MSYS2
+
+```
+mkdir build && cd build
+cmake .. -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release
+cmake --build .
+```
+
+The C++ binary and the Python scripts produce identical output and can be used
+interchangeably.  The Python scripts require no build step and remain the
+quickest option on systems where Python 3 is already present.
+
+---
+
 ## Hardware variants
 
 | Year | Hardware | Notes |

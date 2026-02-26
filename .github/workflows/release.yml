@@ -1,0 +1,93 @@
+name: Release
+
+# Triggered by pushing a version tag: git tag v1.0.0 && git push origin v1.0.0
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write   # required to create GitHub Releases
+
+jobs:
+  # ── Build native binaries ──────────────────────────────────────────────────
+  build:
+    name: Build / ${{ matrix.asset_name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            asset_name: intv2convert-windows-x64
+            binary:     build/Release/intv2convert.exe
+            archive:    intv2convert-windows-x64.zip
+
+          - os: ubuntu-latest
+            asset_name: intv2convert-linux-x64
+            binary:     build/intv2convert
+            archive:    intv2convert-linux-x64.tar.gz
+
+          - os: macos-latest
+            asset_name: intv2convert-macos-universal
+            binary:     build/intv2convert
+            archive:    intv2convert-macos-universal.tar.gz
+            cmake_extra: -DCMAKE_OSX_ARCHITECTURES=arm64;x86_64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release ${{ matrix.cmake_extra }}
+
+      - name: Build
+        run: cmake --build build --config Release
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "${{ matrix.binary }}" `
+            -DestinationPath "${{ matrix.archive }}"
+
+      - name: Package (Unix)
+        if: runner.os != 'Windows'
+        run: tar -czf "${{ matrix.archive }}" -C build intv2convert
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset_name }}
+          path: ${{ matrix.archive }}
+
+  # ── Create GitHub Release and attach all assets ───────────────────────────
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Bundle Python scripts
+        run: |
+          zip dist/intv2convert-python.zip \
+            batch_convert.py \
+            make_intv2_from_rom.py \
+            make_intv2_from_cfg.py \
+            make_intv2.py \
+            README.md
+
+      - name: Publish Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            --title "intv2convert ${{ github.ref_name }}" \
+            --generate-notes \
+            dist/*
