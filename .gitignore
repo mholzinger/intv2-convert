@@ -1,3 +1,7 @@
+# CMake build output — never commit; each runner creates its own
+build/
+out/
+
 __pycache__/
 *.pyc
 *.pyo

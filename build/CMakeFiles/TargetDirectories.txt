@@ -1,7 +1,0 @@
-/Users/mikeholzinger/src/intv2-convert/build/CMakeFiles/intv2convert.dir
-/Users/mikeholzinger/src/intv2-convert/build/CMakeFiles/edit_cache.dir
-/Users/mikeholzinger/src/intv2-convert/build/CMakeFiles/rebuild_cache.dir
-/Users/mikeholzinger/src/intv2-convert/build/CMakeFiles/list_install_components.dir
-/Users/mikeholzinger/src/intv2-convert/build/CMakeFiles/install.dir
-/Users/mikeholzinger/src/intv2-convert/build/CMakeFiles/install/local.dir
-/Users/mikeholzinger/src/intv2-convert/build/CMakeFiles/install/strip.dir
