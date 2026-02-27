@@ -17,6 +17,9 @@
 #ifdef _WIN32
 #  include <windows.h>
 #endif
+#ifdef _WIN32
+#  include <windows.h>
+#endif
 
 namespace fs = std::filesystem;
 
@@ -322,7 +325,21 @@ int main(int argc, char* argv[]) {
 #endif
 
     GLFWwindow* window = glfwCreateWindow(860, 560, "intv2convert", nullptr, nullptr);
-    if (!window) { glfwTerminate(); return 1; }
+    if (!window) {
+#ifdef _WIN32
+        MessageBoxA(nullptr,
+            "intv2convert could not open an OpenGL 3.0 window.\n\n"
+            "Your graphics driver may not support OpenGL 3.0, or it may need updating.\n\n"
+            "You can still use intv2convert from the command line:\n"
+            "  intv2convert rom   <input.rom> <output_stem>\n"
+            "  intv2convert cfg   <input.bin> <input.cfg> <output_stem>\n"
+            "  intv2convert lst   <input.lst> <output.intv> [--pocket]\n"
+            "  intv2convert batch <source_dir> <output_dir> [--dry-run] [--force]",
+            "intv2convert", MB_OK | MB_ICONERROR);
+#endif
+        glfwTerminate();
+        return 1;
+    }
     glfwMakeContextCurrent(window);
     glfwSwapInterval(1);   // vsync
 
