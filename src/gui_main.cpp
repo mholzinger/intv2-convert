@@ -1,9 +1,5 @@
 #include <imgui.h>
-#include <imgui_impl_glfw.h>
-#include <imgui_impl_opengl3.h>
-#include <GLFW/glfw3.h>   // drags in system OpenGL headers
 #include <nfd.hpp>
-
 #include "batch.hpp"
 
 #include <atomic>
@@ -14,11 +10,16 @@
 #include <vector>
 #include <cstdio>
 #include <cstring>
+
 #ifdef _WIN32
 #  include <windows.h>
-#endif
-#ifdef _WIN32
-#  include <windows.h>
+#  include <imgui_impl_win32.h>
+#  include <imgui_impl_dx11.h>
+#  include <d3d11.h>
+#else
+#  include <imgui_impl_glfw.h>
+#  include <imgui_impl_opengl3.h>
+#  include <GLFW/glfw3.h>
 #endif
 
 namespace fs = std::filesystem;
@@ -152,7 +153,6 @@ static void draw_batch_tab(AppState& s) {
             else
                 ImGui::TextUnformatted(line.c_str());
         }
-        // Auto-scroll to bottom only when already near the bottom
         if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY() - 2.0f)
             ImGui::SetScrollHereY(1.0f);
     }
@@ -185,7 +185,6 @@ static void draw_single_tab(AppState& s) {
     static const nfdu8filteritem_t cfg_filter[] = { {"Config files", "cfg"    } };
 
     if (s.single_fmt == 0) {
-        // ROM mode
         ImGui::Text("ROM file:");
         ImGui::SetNextItemWidth(field_w);
         ImGui::InputText("##srom", s.single_rom, sizeof(s.single_rom));
@@ -195,7 +194,6 @@ static void draw_single_tab(AppState& s) {
             auto_stem(s.single_rom, s.single_stem, sizeof(s.single_stem));
         }
     } else {
-        // BIN + CFG mode
         ImGui::Text("BIN file:");
         ImGui::SetNextItemWidth(field_w);
         ImGui::InputText("##sbin", s.single_bin, sizeof(s.single_bin));
@@ -261,7 +259,25 @@ static void draw_single_tab(AppState& s) {
     }
 }
 
-// ── CLI fallback (same subcommands as intv2convert) ───────────────────────
+// ── Shared ImGui frame ────────────────────────────────────────────────────
+
+static void draw_ui(AppState& state) {
+    ImGuiIO& io = ImGui::GetIO();
+    ImGui::SetNextWindowPos({0, 0});
+    ImGui::SetNextWindowSize(io.DisplaySize);
+    ImGui::Begin("##root", nullptr,
+                 ImGuiWindowFlags_NoTitleBar  | ImGuiWindowFlags_NoResize   |
+                 ImGuiWindowFlags_NoMove      | ImGuiWindowFlags_NoCollapse |
+                 ImGuiWindowFlags_NoBringToFrontOnFocus);
+    if (ImGui::BeginTabBar("##tabs")) {
+        if (ImGui::BeginTabItem("Batch"))       { draw_batch_tab(state);  ImGui::EndTabItem(); }
+        if (ImGui::BeginTabItem("Single File")) { draw_single_tab(state); ImGui::EndTabItem(); }
+        ImGui::EndTabBar();
+    }
+    ImGui::End();
+}
+
+// ── CLI fallback ──────────────────────────────────────────────────────────
 
 int cmd_rom(int argc, char* argv[]);
 int cmd_cfg(int argc, char* argv[]);
@@ -270,8 +286,6 @@ int cmd_batch(int argc, char* argv[]);
 
 static int run_cli(int argc, char* argv[]) {
 #ifdef _WIN32
-    // Re-attach to the parent console so printf/fprintf reach the terminal.
-    // This is a no-op when there is no parent console (e.g. double-clicked).
     if (AttachConsole(ATTACH_PARENT_PROCESS)) {
         freopen("CONOUT$", "w", stdout);
         freopen("CONOUT$", "w", stderr);
@@ -289,12 +303,11 @@ static int run_cli(int argc, char* argv[]) {
         return 1;
     }
     std::string cmd = argv[1];
-    if (cmd == "rom")                        return cmd_rom(argc - 1, argv + 1);
-    if (cmd == "cfg")                        return cmd_cfg(argc - 1, argv + 1);
-    if (cmd == "lst")                        return cmd_lst(argc - 1, argv + 1);
-    if (cmd == "batch")                      return cmd_batch(argc - 1, argv + 1);
+    if (cmd == "rom")   return cmd_rom(argc - 1, argv + 1);
+    if (cmd == "cfg")   return cmd_cfg(argc - 1, argv + 1);
+    if (cmd == "lst")   return cmd_lst(argc - 1, argv + 1);
+    if (cmd == "batch") return cmd_batch(argc - 1, argv + 1);
     if (cmd == "--help" || cmd == "-h" || cmd == "help") {
-        // re-invoke with no args to print usage
         char* fake[] = { argv[0] };
         return run_cli(1, fake);
     }
@@ -302,54 +315,208 @@ static int run_cli(int argc, char* argv[]) {
     return 1;
 }
 
+// ── Windows: DirectX 11 platform layer ───────────────────────────────────
+#ifdef _WIN32
+
+static ID3D11Device*           g_pd3dDevice           = nullptr;
+static ID3D11DeviceContext*    g_pd3dDeviceContext    = nullptr;
+static IDXGISwapChain*         g_pSwapChain           = nullptr;
+static UINT                    g_ResizeWidth  = 0, g_ResizeHeight = 0;
+static ID3D11RenderTargetView* g_mainRenderTargetView = nullptr;
+
+static void dx11_create_render_target() {
+    ID3D11Texture2D* pBack = nullptr;
+    g_pSwapChain->GetBuffer(0, IID_PPV_ARGS(&pBack));
+    g_pd3dDevice->CreateRenderTargetView(pBack, nullptr, &g_mainRenderTargetView);
+    pBack->Release();
+}
+
+static void dx11_cleanup_render_target() {
+    if (g_mainRenderTargetView) {
+        g_mainRenderTargetView->Release();
+        g_mainRenderTargetView = nullptr;
+    }
+}
+
+static bool dx11_create_device(HWND hWnd) {
+    DXGI_SWAP_CHAIN_DESC sd          = {};
+    sd.BufferCount                   = 2;
+    sd.BufferDesc.Format             = DXGI_FORMAT_R8G8B8A8_UNORM;
+    sd.BufferDesc.RefreshRate        = {60, 1};
+    sd.Flags                         = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
+    sd.BufferUsage                   = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+    sd.OutputWindow                  = hWnd;
+    sd.SampleDesc                    = {1, 0};
+    sd.Windowed                      = TRUE;
+    sd.SwapEffect                    = DXGI_SWAP_EFFECT_DISCARD;
+
+    const D3D_FEATURE_LEVEL levels[] = {D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_10_0};
+    D3D_FEATURE_LEVEL featureLevel;
+
+    // Try hardware renderer first, fall back to WARP (CPU software renderer).
+    // WARP ensures the GUI works on VMs and machines with no hardware DX11.
+    HRESULT res = D3D11CreateDeviceAndSwapChain(
+        nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, 0,
+        levels, 2, D3D11_SDK_VERSION, &sd,
+        &g_pSwapChain, &g_pd3dDevice, &featureLevel, &g_pd3dDeviceContext);
+    if (FAILED(res))
+        res = D3D11CreateDeviceAndSwapChain(
+            nullptr, D3D_DRIVER_TYPE_WARP, nullptr, 0,
+            levels, 2, D3D11_SDK_VERSION, &sd,
+            &g_pSwapChain, &g_pd3dDevice, &featureLevel, &g_pd3dDeviceContext);
+    if (FAILED(res)) return false;
+
+    dx11_create_render_target();
+    return true;
+}
+
+static void dx11_cleanup_device() {
+    dx11_cleanup_render_target();
+    if (g_pSwapChain)        { g_pSwapChain->Release();        g_pSwapChain        = nullptr; }
+    if (g_pd3dDeviceContext) { g_pd3dDeviceContext->Release(); g_pd3dDeviceContext = nullptr; }
+    if (g_pd3dDevice)        { g_pd3dDevice->Release();        g_pd3dDevice        = nullptr; }
+}
+
+extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(
+    HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+
+static LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    if (ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam))
+        return true;
+    switch (msg) {
+    case WM_SIZE:
+        if (wParam == SIZE_MINIMIZED) return 0;
+        g_ResizeWidth  = LOWORD(lParam);
+        g_ResizeHeight = HIWORD(lParam);
+        return 0;
+    case WM_SYSCOMMAND:
+        if ((wParam & 0xfff0) == SC_KEYMENU) return 0;  // suppress Alt menu flash
+        break;
+    case WM_DESTROY:
+        PostQuitMessage(0);
+        return 0;
+    }
+    return DefWindowProcW(hWnd, msg, wParam, lParam);
+}
+
+#endif // _WIN32
+
 // ── main ──────────────────────────────────────────────────────────────────
 
 int main(int argc, char* argv[]) {
     if (argc > 1) return run_cli(argc, argv);
+
+#ifdef _WIN32
+    // ── Windows: Win32 window + DirectX 11 ───────────────────────────────
+
+    WNDCLASSEXW wc = {sizeof(wc), CS_CLASSDC, WndProc, 0, 0,
+                      GetModuleHandle(nullptr),
+                      nullptr, nullptr, nullptr, nullptr,
+                      L"intv2convert", nullptr};
+    RegisterClassExW(&wc);
+    HWND hwnd = CreateWindowW(wc.lpszClassName, L"intv2convert",
+                              WS_OVERLAPPEDWINDOW,
+                              CW_USEDEFAULT, CW_USEDEFAULT, 860, 560,
+                              nullptr, nullptr, wc.hInstance, nullptr);
+    if (!dx11_create_device(hwnd)) {
+        MessageBoxA(nullptr, "Failed to create a DirectX 11 device.\n\n"
+            "You can still use intv2convert from the command line.",
+            "intv2convert", MB_OK | MB_ICONERROR);
+        dx11_cleanup_device();
+        DestroyWindow(hwnd);
+        UnregisterClassW(wc.lpszClassName, wc.hInstance);
+        return 1;
+    }
+
+    ShowWindow(hwnd, SW_SHOWDEFAULT);
+    UpdateWindow(hwnd);
+
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGuiIO& io = ImGui::GetIO();
+    io.IniFilename = nullptr;
+    ImGui::StyleColorsDark();
+    io.Fonts->AddFontDefault();
+    ImGui::GetStyle().FramePadding  = {6, 4};
+    ImGui::GetStyle().ItemSpacing   = {8, 6};
+    ImGui::GetStyle().WindowPadding = {12, 12};
+
+    ImGui_ImplWin32_Init(hwnd);
+    ImGui_ImplDX11_Init(g_pd3dDevice, g_pd3dDeviceContext);
+
+    NFD::Guard nfd_guard;
+    AppState state;
+
+    bool done = false;
+    while (!done) {
+        MSG msg;
+        while (PeekMessage(&msg, nullptr, 0U, 0U, PM_REMOVE)) {
+            TranslateMessage(&msg);
+            DispatchMessage(&msg);
+            if (msg.message == WM_QUIT) done = true;
+        }
+        if (done) break;
+
+        if (g_ResizeWidth != 0 && g_ResizeHeight != 0) {
+            dx11_cleanup_render_target();
+            g_pSwapChain->ResizeBuffers(0, g_ResizeWidth, g_ResizeHeight,
+                                        DXGI_FORMAT_UNKNOWN, 0);
+            g_ResizeWidth = g_ResizeHeight = 0;
+            dx11_create_render_target();
+        }
+
+        ImGui_ImplDX11_NewFrame();
+        ImGui_ImplWin32_NewFrame();
+        ImGui::NewFrame();
+        draw_ui(state);
+        ImGui::Render();
+
+        const float cc[4] = {0.12f, 0.12f, 0.14f, 1.0f};
+        g_pd3dDeviceContext->OMSetRenderTargets(1, &g_mainRenderTargetView, nullptr);
+        g_pd3dDeviceContext->ClearRenderTargetView(g_mainRenderTargetView, cc);
+        ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+        g_pSwapChain->Present(1, 0);  // vsync
+    }
+
+    if (state.worker.joinable()) state.worker.join();
+    ImGui_ImplDX11_Shutdown();
+    ImGui_ImplWin32_Shutdown();
+    ImGui::DestroyContext();
+    dx11_cleanup_device();
+    DestroyWindow(hwnd);
+    UnregisterClassW(wc.lpszClassName, wc.hInstance);
+    return 0;
+
+#else
+    // ── macOS + Linux: GLFW + OpenGL ─────────────────────────────────────
+
     glfwSetErrorCallback([](int, const char* desc) {
         fprintf(stderr, "GLFW Error: %s\n", desc);
     });
     if (!glfwInit()) return 1;
 
-#ifdef __APPLE__
-    // macOS requires forward-compat core profile
+#  ifdef __APPLE__
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
     const char* glsl_version = "#version 150";
-#else
+#  else
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
     const char* glsl_version = "#version 130";
-#endif
+#  endif
 
     GLFWwindow* window = glfwCreateWindow(860, 560, "intv2convert", nullptr, nullptr);
-    if (!window) {
-#ifdef _WIN32
-        MessageBoxA(nullptr,
-            "intv2convert could not open an OpenGL 3.0 window.\n\n"
-            "Your graphics driver may not support OpenGL 3.0, or it may need updating.\n\n"
-            "You can still use intv2convert from the command line:\n"
-            "  intv2convert rom   <input.rom> <output_stem>\n"
-            "  intv2convert cfg   <input.bin> <input.cfg> <output_stem>\n"
-            "  intv2convert lst   <input.lst> <output.intv> [--pocket]\n"
-            "  intv2convert batch <source_dir> <output_dir> [--dry-run] [--force]",
-            "intv2convert", MB_OK | MB_ICONERROR);
-#endif
-        glfwTerminate();
-        return 1;
-    }
+    if (!window) { glfwTerminate(); return 1; }
     glfwMakeContextCurrent(window);
-    glfwSwapInterval(1);   // vsync
+    glfwSwapInterval(1);
 
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
-    io.IniFilename = nullptr;   // don't write imgui.ini
+    io.IniFilename = nullptr;
     ImGui::StyleColorsDark();
-
-    // Slightly larger font for readability
     io.Fonts->AddFontDefault();
     ImGui::GetStyle().FramePadding  = {6, 4};
     ImGui::GetStyle().ItemSpacing   = {8, 6};
@@ -367,29 +534,9 @@ int main(int argc, char* argv[]) {
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
-
-        ImGui::SetNextWindowPos({0, 0});
-        ImGui::SetNextWindowSize(io.DisplaySize);
-        ImGui::Begin("##root", nullptr,
-                     ImGuiWindowFlags_NoTitleBar  | ImGuiWindowFlags_NoResize   |
-                     ImGuiWindowFlags_NoMove      | ImGuiWindowFlags_NoCollapse |
-                     ImGuiWindowFlags_NoBringToFrontOnFocus);
-
-        if (ImGui::BeginTabBar("##tabs")) {
-            if (ImGui::BeginTabItem("Batch")) {
-                draw_batch_tab(state);
-                ImGui::EndTabItem();
-            }
-            if (ImGui::BeginTabItem("Single File")) {
-                draw_single_tab(state);
-                ImGui::EndTabItem();
-            }
-            ImGui::EndTabBar();
-        }
-
-        ImGui::End();
-
+        draw_ui(state);
         ImGui::Render();
+
         int dw, dh;
         glfwGetFramebufferSize(window, &dw, &dh);
         glViewport(0, 0, dw, dh);
@@ -399,13 +546,13 @@ int main(int argc, char* argv[]) {
         glfwSwapBuffers(window);
     }
 
-    // Wait for any in-progress conversion before cleanup
     if (state.worker.joinable()) state.worker.join();
-
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
     glfwDestroyWindow(window);
     glfwTerminate();
     return 0;
+
+#endif  // !_WIN32
 }

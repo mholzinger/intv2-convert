@@ -10,20 +10,8 @@ include(FetchContent)
 option(BUILD_GUI "Build with native GUI (downloads ~20 MB of sources on first build)" OFF)
 
 if(BUILD_GUI)
-    find_package(OpenGL REQUIRED)
 
-    # GLFW — window + OpenGL context
-    FetchContent_Declare(glfw
-        GIT_REPOSITORY https://github.com/glfw/glfw.git
-        GIT_TAG        3.4
-        GIT_SHALLOW    TRUE)
-    set(GLFW_BUILD_DOCS     OFF CACHE BOOL "" FORCE)
-    set(GLFW_BUILD_TESTS    OFF CACHE BOOL "" FORCE)
-    set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-    set(GLFW_BUILD_WAYLAND  OFF CACHE BOOL "" FORCE)
-    FetchContent_MakeAvailable(glfw)
-
-    # Dear ImGui — immediate-mode GUI
+    # Dear ImGui — immediate-mode GUI (shared across all platforms)
     FetchContent_Declare(imgui
         GIT_REPOSITORY https://github.com/ocornut/imgui.git
         GIT_TAG        v1.91.6
@@ -37,7 +25,7 @@ if(BUILD_GUI)
         GIT_SHALLOW    TRUE)
     FetchContent_MakeAvailable(nfd)
 
-    add_executable(intv2convert WIN32
+    set(GUI_SOURCES
         src/gui_main.cpp
         src/writer.cpp
         src/rom.cpp
@@ -48,26 +36,59 @@ if(BUILD_GUI)
         ${imgui_SOURCE_DIR}/imgui_draw.cpp
         ${imgui_SOURCE_DIR}/imgui_tables.cpp
         ${imgui_SOURCE_DIR}/imgui_widgets.cpp
-        ${imgui_SOURCE_DIR}/backends/imgui_impl_glfw.cpp
-        ${imgui_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp
     )
+
+    if(WIN32)
+        # ── Windows: Win32 window + DirectX 11 ───────────────────────────
+        # DX11 works on all Windows machines including VMs (WARP software fallback).
+        # No OpenGL dependency on Windows at all.
+        add_executable(intv2convert WIN32
+            ${GUI_SOURCES}
+            ${imgui_SOURCE_DIR}/backends/imgui_impl_win32.cpp
+            ${imgui_SOURCE_DIR}/backends/imgui_impl_dx11.cpp
+        )
+        target_link_libraries(intv2convert PRIVATE nfd d3d11 dxgi)
+
+    else()
+        # ── macOS + Linux: GLFW + OpenGL 3 ───────────────────────────────
+        find_package(OpenGL REQUIRED)
+
+        FetchContent_Declare(glfw
+            GIT_REPOSITORY https://github.com/glfw/glfw.git
+            GIT_TAG        3.4
+            GIT_SHALLOW    TRUE)
+        set(GLFW_BUILD_DOCS     OFF CACHE BOOL "" FORCE)
+        set(GLFW_BUILD_TESTS    OFF CACHE BOOL "" FORCE)
+        set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+        set(GLFW_BUILD_WAYLAND  OFF CACHE BOOL "" FORCE)
+        FetchContent_MakeAvailable(glfw)
+
+        add_executable(intv2convert
+            ${GUI_SOURCES}
+            ${imgui_SOURCE_DIR}/backends/imgui_impl_glfw.cpp
+            ${imgui_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp
+        )
+        target_link_libraries(intv2convert PRIVATE glfw nfd OpenGL::GL)
+
+        if(APPLE)
+            # Apple deprecated OpenGL in macOS 10.14 but it still works fine
+            target_compile_definitions(intv2convert PRIVATE GL_SILENCE_DEPRECATION)
+        endif()
+
+    endif()
+
     target_include_directories(intv2convert PRIVATE
         src
         ${imgui_SOURCE_DIR}
         ${imgui_SOURCE_DIR}/backends
     )
-    target_link_libraries(intv2convert PRIVATE glfw nfd OpenGL::GL)
 
     if(MSVC)
         target_compile_options(intv2convert PRIVATE /W4 /wd4996)
-        # WIN32 sets /SUBSYSTEM:WINDOWS; change entry point so we can use main()
+        # WIN32 sets /SUBSYSTEM:WINDOWS; override entry point so we can use main()
         target_link_options(intv2convert PRIVATE /ENTRY:mainCRTStartup)
     else()
         target_compile_options(intv2convert PRIVATE -Wall -Wextra)
-        # Apple deprecated OpenGL in macOS 10.14 but it still works fine
-        if(APPLE)
-            target_compile_definitions(intv2convert PRIVATE GL_SILENCE_DEPRECATION)
-        endif()
     endif()
 
     # GCC < 9 / Clang < 9 need an explicit filesystem link flag
@@ -78,7 +99,7 @@ if(BUILD_GUI)
     endif()
 
 else()
-    # CLI-only build (no GUI dependencies)
+    # ── CLI-only build (no GUI dependencies) ─────────────────────────────
     add_executable(intv2convert
         src/main.cpp
         src/writer.cpp
