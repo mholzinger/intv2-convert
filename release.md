@@ -1,19 +1,20 @@
-# intv2convert v1.1.0
+# intv2convert v1.2.0
 
-Adds a native graphical interface to `intv2convert`.  The same binary handles
-both GUI and CLI — launch it without arguments for the GUI, or pass a subcommand
-to use it as a command-line tool.
+Switches the Windows GUI from OpenGL to **DirectX 11**, eliminating the most
+common failure case: VMs and machines with minimal GPU drivers that don't expose
+an OpenGL 3.0 context.  macOS and Linux continue to use GLFW + OpenGL and are
+unchanged.
 
 ## What's new
 
-- **Native GUI** — two-tab interface for Batch conversion and Single File conversion,
-  with native OS file/folder pickers on all platforms
-- **One binary** — no separate `-gui` executable; `intv2convert` opens its GUI when
-  launched from Finder, Explorer, or a desktop shortcut, and behaves as a full CLI
-  tool when invoked from a terminal with arguments
-- **Windows console attachment** — on Windows the GUI binary automatically attaches
-  to the parent terminal when called with arguments, so output appears normally in
-  cmd, PowerShell, or any shell
+- **DirectX 11 on Windows** — the GUI no longer requires an OpenGL driver.  DX11
+  works on every Windows machine including virtual machines (VMware, VirtualBox,
+  Parallels, Hyper-V).
+- **WARP software renderer fallback** — if no DX11 hardware is available,
+  `intv2convert` automatically falls back to Windows' built-in CPU software
+  renderer (WARP).  The GUI opens on every Windows 8+ machine, no exceptions.
+- **Smaller Windows binary** — GLFW is no longer compiled or linked on Windows,
+  reducing the executable size.
 
 ## Downloads
 
