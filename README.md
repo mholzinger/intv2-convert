@@ -279,3 +279,9 @@ appending one zero word, and the header word count reflects the padded length.
   INTV2 maps each chunk to a fixed address at load time; there is no runtime page-flip
   mechanism. `make_intv2_from_cfg.py` will detect these and exit with an error.
 - `.rom` segments containing Mattel-style bank switching are likewise not supported.
+- **JLP games will convert but black-screen on FPGA hardware.** JLP (Joe Zbiciak's
+  Learning Platform) is a coprocessor add-on that provides accelerated math, extra RAM,
+  and flash storage. jzIntv emulates JLP in software, so JLP games run fine in the
+  emulator. The Analogue Nt Mini Noir and Analogue Pocket FPGA cores do not implement
+  JLP — the ROM loads but the game halts immediately. Detection: look for `jlp_accel`
+  or `jlp` keys in the `.cfg` file, or a `jlp` metadata tag in the `.rom` file.
