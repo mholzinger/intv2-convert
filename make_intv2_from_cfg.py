@@ -64,7 +64,7 @@ def parse_cfg(cfg_path):
                 continue
 
             # Detect bank-switching: PAGE annotation after the address range
-            page_match = re.search(r'\bPAGE\s+(\d+)', stripped, re.IGNORECASE)
+            page_match = re.search(r'\bPAGE\s+(\w+)', stripped, re.IGNORECASE)
             if page_match:
                 banked_lines.append(stripped)
                 continue

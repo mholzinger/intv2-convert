@@ -52,7 +52,7 @@ static bool parse_mapping_line(const std::string& line,
 }
 
 // Return true if the line contains a PAGE bank-switching annotation
-// (mirrors Python: re.compile(r'\bPAGE\s+(\d+)', re.IGNORECASE)).
+// (mirrors Python: re.compile(r'\bPAGE\s+(\w+)', re.IGNORECASE)).
 static bool has_page_annotation(const std::string& line) {
     std::string upper;
     upper.reserve(line.size());
@@ -66,7 +66,7 @@ static bool has_page_annotation(const std::string& line) {
         if (word_before && word_after) {
             size_t p2 = after;
             while (p2 < upper.size() && isspace((unsigned char)upper[p2])) ++p2;
-            if (p2 > after && p2 < upper.size() && isdigit((unsigned char)upper[p2]))
+            if (p2 > after && p2 < upper.size() && isalnum((unsigned char)upper[p2]))
                 return true;
         }
         ++pos;
