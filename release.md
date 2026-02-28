@@ -1,20 +1,19 @@
-# intv2convert v1.2.0
+# intv2convert v1.2.1
 
-Switches the Windows GUI from OpenGL to **DirectX 11**, eliminating the most
-common failure case: VMs and machines with minimal GPU drivers that don't expose
-an OpenGL 3.0 context.  macOS and Linux continue to use GLFW + OpenGL and are
-unchanged.
+Patch release fixing a silent data-corruption bug in bank-switch detection.
 
-## What's new
+## Bug fix
 
-- **DirectX 11 on Windows** — the GUI no longer requires an OpenGL driver.  DX11
-  works on every Windows machine including virtual machines (VMware, VirtualBox,
-  Parallels, Hyper-V).
-- **WARP software renderer fallback** — if no DX11 hardware is available,
-  `intv2convert` automatically falls back to Windows' built-in CPU software
-  renderer (WARP).  The GUI opens on every Windows 8+ machine, no exceptions.
-- **Smaller Windows binary** — GLFW is no longer compiled or linked on Windows,
-  reducing the executable size.
+- **PAGE detection now catches lettered pages** — `.cfg` files that use `PAGE A`,
+  `PAGE B`, `PAGE C`, etc. (as opposed to `PAGE 1`, `PAGE 2`, …) were not
+  recognised as bank-switched.  They were silently converted to corrupt INTV2
+  files with dozens of overlapping chunks instead of being rejected with an error.
+  The fix applies to both the Python scripts and the native C++ binary.
+
+  **Affected ROMs** include titles that use Intellicart bank-switching with
+  alphabetic page labels (e.g. *Sorrow of Gadhlan Thur*).  If you converted any
+  such ROMs with v1.2.0 or earlier, delete the output files and reconvert — the
+  tool will now correctly refuse them with a clear error message.
 
 ## Downloads
 
